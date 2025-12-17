@@ -1,9 +1,10 @@
 """
-Burp Suite Professional Automated Scanner - WINDOWS VERSION (FIXED)
+Burp Suite Professional Automated Scanner - FINAL WORKING VERSION
 Uses burp-rest-api extension for proper API access
 Scans multiple websites with config and exports vulnerabilities as XML
 
 File: main.py
+Requirements: Java 21+, Burp Suite Pro, burp-rest-api JAR
 """
 
 import subprocess
@@ -19,18 +20,16 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 # ==================== CONFIGURATION ====================
-# IMPORTANT: Download burp-rest-api.jar from https://github.com/vmware/burp-rest-api/releases
-BURP_JAR_PATH = r"C:\Users\varun.bhat\Downloads\burpsuite_pro_v2025.11.5.jar"  # Your Burp Suite JAR
-BURP_REST_API_JAR = r"C:\Users\varun.bhat\Downloads\burp-rest-api-2.3.2.jar"  # REST API JAR path
+BURP_JAR_PATH = r"C:\Users\varun.bhat\Downloads\burpsuite_pro_v2025.11.5.jar"
+BURP_REST_API_JAR = r"C:\Users\varun.bhat\Downloads\burp-rest-api-2.3.2.jar"
 
-BURP_API_URL = "http://localhost:8090"  # burp-rest-api default port
-BURP_API_KEY = "AK3cMFNtZqNhz2PeC0W5whjJGyThGysI"  # Your API key
+BURP_API_URL = "http://localhost:8090"
+BURP_API_KEY = "AK3cMFNtZqNhz2PeC0W5whjJGyThGysI"
 
 INPUT_FILE = "input/websites.txt"
-CONFIG_FILE = "config/burp_config.json"  # Optional Burp project config file
+CONFIG_FILE = "config/burp_config.json"
 OUTPUT_DIR = "output"
 
-# API Headers
 API_HEADERS = {
     "Content-Type": "application/json",
     "API-KEY": BURP_API_KEY
@@ -38,7 +37,7 @@ API_HEADERS = {
 
 
 class BurpManager:
-    """Manages Burp Suite process with REST API extension"""
+    """Manages Burp Suite process lifecycle"""
     
     def __init__(self, burp_jar, rest_api_jar, api_key, config_file):
         self.burp_jar = burp_jar
@@ -49,7 +48,7 @@ class BurpManager:
         self.temp_project = None
     
     def cleanup_orphaned_temp_files(self):
-        """Clean up any leftover temp project files from crashed runs"""
+        """Clean up leftover temp project files"""
         try:
             for file in os.listdir('.'):
                 if file.startswith('temp_burp_project_') and file.endswith('.burp'):
@@ -62,21 +61,19 @@ class BurpManager:
             pass
     
     def start(self):
-        """Start Burp Suite with REST API enabled"""
+        """Start Burp Suite with REST API"""
         print("[*] Starting Burp Suite Professional with REST API...")
         
-        # Clean up any orphaned temp files first
         self.cleanup_orphaned_temp_files()
         
-        # Check if our previous instance is still running
         if self.is_running():
-            print("[!] Our Burp Suite instance is still running. Killing it...")
+            print("[!] Previous Burp instance still running. Killing it...")
             self.kill()
             time.sleep(5)
         
-        # Verify JAR files exist
+        # Verify files exist
         if not os.path.exists(self.burp_jar):
-            print(f"[!] ERROR: Burp Suite JAR not found: {self.burp_jar}")
+            print(f"[!] ERROR: Burp JAR not found: {self.burp_jar}")
             return False
         
         if not os.path.exists(self.rest_api_jar):
@@ -84,37 +81,34 @@ class BurpManager:
             return False
         
         try:
-            # Create temporary project file
             self.temp_project = f"temp_burp_project_{int(time.time())}.burp"
             
-            # Build command for Windows - CORRECTED VERSION
-            # Use -cp (classpath) with semicolon separator on Windows
+            # CORRECT COMMAND - Uses -jar with --burp.jar parameter
             cmd = [
                 "java",
                 "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",
                 "--add-opens=java.base/java.io=ALL-UNNAMED",
-                "-Xmx2g",  # Allocate 2GB RAM
-                "-Djava.awt.headless=true",  # Run headless
-                "-cp",
-                f"{self.burp_jar};{self.rest_api_jar}",  # Semicolon for Windows
-                "com.vmware.burp.extension.BurpApplication",  # Main class
+                "-Xmx4g",
+                "-Djava.awt.headless=true",
+                "-jar",
+                self.rest_api_jar,
                 f"--burp.jar={self.burp_jar}",
                 f"--apikey={self.api_key}",
                 "--headless.mode=true",
                 f"--project-file={self.temp_project}"
             ]
             
-            # Add config file if it exists
+            # Add config if exists
             if os.path.exists(self.config_file):
                 cmd.append(f"--config-file={self.config_file}")
             
-            print(f"[*] Executing command...")
+            print(f"[*] Command: {' '.join(cmd)}")
             print(f"[*] Burp JAR: {self.burp_jar}")
             print(f"[*] REST API JAR: {self.rest_api_jar}")
-            print(f"[*] Project file: {self.temp_project}")
+            print(f"[*] Project: {self.temp_project}")
             
-            # Start process
+            # Start Burp
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -123,40 +117,38 @@ class BurpManager:
             )
             
             print(f"[+] Burp Suite started (PID: {self.process.pid})")
-            print(f"[*] Burp is running in HEADLESS mode (no GUI will open)")
+            print(f"[*] Running in HEADLESS mode (no GUI)")
             return True
             
         except Exception as e:
-            print(f"[!] Failed to start Burp Suite: {e}")
+            print(f"[!] Failed to start Burp: {e}")
             import traceback
             traceback.print_exc()
             return False
     
     def is_running(self):
-        """Check if OUR Burp Suite process is running"""
+        """Check if our Burp process is alive"""
         if self.process is None:
             return False
         
         try:
-            # Check if our specific process is still alive
             return psutil.pid_exists(self.process.pid) and self.process.poll() is None
         except:
             return False
     
     def kill(self):
-        """Kill OUR Burp Suite process and cleanup"""
+        """Kill our Burp process"""
         print("[*] Killing Burp Suite process...")
         
         if self.process is None:
-            print("[!] No Burp process to kill (process reference is None)")
+            print("[!] No process to kill")
             time.sleep(2)
             return
         
         try:
-            # Get the process object
             proc = psutil.Process(self.process.pid)
             
-            # Kill all child processes first (Burp may spawn children)
+            # Kill children first
             children = proc.children(recursive=True)
             for child in children:
                 try:
@@ -165,55 +157,55 @@ class BurpManager:
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
             
-            # Kill the main process
+            # Kill main process
             print(f"[*] Killing main Burp process (PID: {self.process.pid})")
             proc.kill()
-            
-            # Wait for process to die
             proc.wait(timeout=10)
-            print(f"[+] Successfully killed Burp process (PID: {self.process.pid})")
+            print(f"[+] Successfully killed Burp (PID: {self.process.pid})")
             
         except psutil.NoSuchProcess:
             print(f"[!] Process {self.process.pid} already dead")
         except psutil.TimeoutExpired:
-            print(f"[!] Process {self.process.pid} didn't die gracefully, forcing...")
+            print(f"[!] Process didn't die gracefully, forcing...")
             try:
-                proc.kill()  # Force kill
+                proc.kill()
             except:
                 pass
         except Exception as e:
             print(f"[!] Error killing process: {e}")
         
         finally:
-            # Clean up temp project file
+            # Cleanup temp project
             if self.temp_project and os.path.exists(self.temp_project):
                 try:
-                    time.sleep(2)  # Wait a bit before cleanup
+                    time.sleep(2)
                     os.remove(self.temp_project)
-                    print(f"[+] Cleaned up temporary project: {self.temp_project}")
+                    print(f"[+] Cleaned up: {self.temp_project}")
                 except Exception as e:
                     print(f"[!] Failed to clean temp project: {e}")
             
-            # Reset process reference
             self.process = None
-            time.sleep(3)  # Wait for cleanup
+            time.sleep(3)
     
     def wait_for_api(self, timeout=120):
-        """Wait for Burp REST API to become available"""
-        print("[*] Waiting for Burp REST API to become ready...")
-        print("[*] This may take 30-60 seconds on first start...")
+        """Wait for Burp REST API to be ready"""
+        print("[*] Waiting for Burp REST API...")
+        print("[*] This may take 30-90 seconds...")
         
         start_time = time.time()
         last_error = None
         
         while time.time() - start_time < timeout:
             try:
-                # Check if process is still alive
                 if not self.is_running():
-                    print("[!] Burp process died unexpectedly")
+                    print("[!] Burp process died unexpectedly!")
+                    # Print stderr for debugging
+                    if self.process and self.process.stderr:
+                        stderr = self.process.stderr.read().decode('utf-8', errors='ignore')
+                        if stderr:
+                            print(f"[!] Burp stderr: {stderr[:500]}")
                     return False
                 
-                # Test with version endpoint
                 response = requests.get(
                     f"{BURP_API_URL}/burp/versions",
                     headers=API_HEADERS,
@@ -230,35 +222,33 @@ class BurpManager:
                     last_error = f"HTTP {response.status_code}"
                     
             except requests.exceptions.ConnectionError:
-                last_error = "Connection refused (API not ready yet)"
+                last_error = "Connection refused (API starting...)"
             except requests.exceptions.Timeout:
-                last_error = "Request timeout"
+                last_error = "Timeout"
             except Exception as e:
                 last_error = str(e)
             
             elapsed = int(time.time() - start_time)
-            print(f"[*] Waiting... ({elapsed}s) - {last_error}")
+            print(f"[*] Waiting... {elapsed}s - {last_error}")
             time.sleep(5)
         
-        print(f"[!] Timeout waiting for Burp API after {timeout}s")
+        print(f"[!] Timeout after {timeout}s")
         print(f"[!] Last error: {last_error}")
         return False
 
 
 class BurpAPIClient:
-    """Handles Burp Suite REST API interactions"""
+    """Burp REST API client"""
     
     def __init__(self, api_url, headers):
         self.api_url = api_url
         self.headers = headers
     
     def spider_scan(self, target_url):
-        """Start spider scan"""
-        print(f"[*] Starting spider scan for: {target_url}")
+        """Start spider/crawl scan"""
+        print(f"[*] Starting spider scan: {target_url}")
         
-        payload = {
-            "baseUrl": target_url
-        }
+        payload = {"baseUrl": target_url}
         
         try:
             response = requests.post(
@@ -269,19 +259,19 @@ class BurpAPIClient:
             )
             
             if response.status_code == 201:
-                print(f"[+] Spider scan started")
+                print(f"[+] Spider started")
                 return True
             else:
-                print(f"[!] Failed to start spider: {response.status_code} - {response.text}")
+                print(f"[!] Spider failed: {response.status_code} - {response.text}")
                 return False
                 
         except Exception as e:
-            print(f"[!] Error starting spider: {e}")
+            print(f"[!] Spider error: {e}")
             return False
     
     def wait_for_spider(self, timeout=1800):
         """Wait for spider to complete"""
-        print(f"[*] Waiting for spider to complete...")
+        print(f"[*] Waiting for spider...")
         
         start_time = time.time()
         while time.time() - start_time < timeout:
@@ -295,13 +285,13 @@ class BurpAPIClient:
                 if response.status_code == 200:
                     status = response.json()
                     progress = status.get('scanPercentage', 0)
-                    print(f"[*] Spider progress: {progress}%")
+                    print(f"[*] Spider: {progress}%")
                     
                     if progress >= 100:
                         print(f"[+] Spider completed")
                         return True
             except Exception as e:
-                print(f"[!] Error checking spider status: {e}")
+                print(f"[!] Spider status error: {e}")
             
             time.sleep(10)
         
@@ -309,12 +299,10 @@ class BurpAPIClient:
         return False
     
     def active_scan(self, target_url):
-        """Start active scan"""
-        print(f"[*] Starting active scan for: {target_url}")
+        """Start active vulnerability scan"""
+        print(f"[*] Starting active scan: {target_url}")
         
-        payload = {
-            "baseUrl": target_url
-        }
+        payload = {"baseUrl": target_url}
         
         try:
             response = requests.post(
@@ -328,16 +316,16 @@ class BurpAPIClient:
                 print(f"[+] Active scan started")
                 return True
             else:
-                print(f"[!] Failed to start active scan: {response.status_code} - {response.text}")
+                print(f"[!] Active scan failed: {response.status_code} - {response.text}")
                 return False
                 
         except Exception as e:
-            print(f"[!] Error starting active scan: {e}")
+            print(f"[!] Active scan error: {e}")
             return False
     
     def wait_for_scan(self, timeout=3600):
         """Wait for active scan to complete"""
-        print(f"[*] Waiting for active scan to complete...")
+        print(f"[*] Waiting for active scan...")
         
         start_time = time.time()
         while time.time() - start_time < timeout:
@@ -351,13 +339,13 @@ class BurpAPIClient:
                 if response.status_code == 200:
                     status = response.json()
                     progress = status.get('scanPercentage', 0)
-                    print(f"[*] Scan progress: {progress}%")
+                    print(f"[*] Scan: {progress}%")
                     
                     if progress >= 100:
-                        print(f"[+] Active scan completed")
+                        print(f"[+] Scan completed")
                         return True
             except Exception as e:
-                print(f"[!] Error checking scan status: {e}")
+                print(f"[!] Scan status error: {e}")
             
             time.sleep(15)
         
@@ -365,8 +353,8 @@ class BurpAPIClient:
         return False
     
     def get_issues(self):
-        """Get all discovered issues/vulnerabilities"""
-        print(f"[*] Retrieving scan issues...")
+        """Fetch all vulnerabilities found"""
+        print(f"[*] Fetching vulnerabilities...")
         
         try:
             response = requests.get(
@@ -377,20 +365,20 @@ class BurpAPIClient:
             
             if response.status_code == 200:
                 issues = response.json()
-                issue_count = len(issues.get('issues', []))
-                print(f"[+] Retrieved {issue_count} issues")
+                count = len(issues.get('issues', []))
+                print(f"[+] Found {count} vulnerabilities")
                 return issues
             else:
                 print(f"[!] Failed to get issues: {response.status_code}")
                 return {"issues": []}
                 
         except Exception as e:
-            print(f"[!] Error retrieving issues: {e}")
+            print(f"[!] Error fetching issues: {e}")
             return {"issues": []}
     
     def get_sitemap(self):
-        """Get sitemap data"""
-        print(f"[*] Retrieving sitemap...")
+        """Fetch sitemap data"""
+        print(f"[*] Fetching sitemap...")
         
         try:
             response = requests.get(
@@ -401,32 +389,32 @@ class BurpAPIClient:
             
             if response.status_code == 200:
                 sitemap = response.json()
-                print(f"[+] Retrieved sitemap data")
+                print(f"[+] Sitemap retrieved")
                 return sitemap
             else:
-                print(f"[!] Failed to get sitemap: {response.status_code}")
+                print(f"[!] Sitemap failed: {response.status_code}")
                 return {}
                 
         except Exception as e:
-            print(f"[!] Error retrieving sitemap: {e}")
+            print(f"[!] Sitemap error: {e}")
             return {}
 
 
 class XMLExporter:
-    """Exports scan results with vulnerabilities to XML"""
+    """Export scan results to XML"""
     
     @staticmethod
     def create_vulnerability_xml(issues, sitemap, target_url):
-        """Create comprehensive XML report"""
+        """Create XML report with vulnerabilities"""
         root = ET.Element("burp_scan_report")
         
-        # Add scan info
+        # Scan info
         scan_info = ET.SubElement(root, "scan_info")
         ET.SubElement(scan_info, "target").text = target_url
         ET.SubElement(scan_info, "scan_date").text = datetime.now().isoformat()
         ET.SubElement(scan_info, "total_issues").text = str(len(issues.get('issues', [])))
         
-        # Add issues/vulnerabilities
+        # Vulnerabilities
         issues_elem = ET.SubElement(root, "vulnerabilities")
         
         for issue in issues.get('issues', []):
@@ -440,24 +428,21 @@ class XMLExporter:
             ET.SubElement(issue_elem, "host").text = str(issue.get('host', 'Unknown'))
             ET.SubElement(issue_elem, "path").text = str(issue.get('path', 'Unknown'))
             
-            # Issue details
+            # Details
             issue_detail = ET.SubElement(issue_elem, "issue_detail")
-            issue_detail.text = str(issue.get('issueDetail', 'No details available'))
+            issue_detail.text = str(issue.get('issueDetail', 'No details'))
             
-            # Issue background
             issue_background = ET.SubElement(issue_elem, "issue_background")
-            issue_background.text = str(issue.get('issueBackground', 'No background available'))
+            issue_background.text = str(issue.get('issueBackground', 'No background'))
             
-            # Remediation
             remediation = ET.SubElement(issue_elem, "remediation")
-            remediation.text = str(issue.get('remediationDetail', 'No remediation available'))
+            remediation.text = str(issue.get('remediationDetail', 'No remediation'))
             
-            # References
             if 'references' in issue:
                 refs = ET.SubElement(issue_elem, "references")
                 refs.text = str(issue.get('references', ''))
         
-        # Add sitemap summary
+        # Sitemap summary
         if sitemap:
             sitemap_elem = ET.SubElement(root, "sitemap_summary")
             ET.SubElement(sitemap_elem, "total_urls").text = str(len(sitemap.get('messages', [])))
@@ -466,14 +451,14 @@ class XMLExporter:
     
     @staticmethod
     def prettify_xml(elem):
-        """Return pretty-printed XML"""
+        """Pretty print XML"""
         rough_string = ET.tostring(elem, encoding='unicode')
         reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent="  ")
     
     def export(self, issues, sitemap, target_url, output_path):
-        """Export complete scan results to XML"""
-        print(f"[*] Exporting results to: {output_path}")
+        """Export to XML file"""
+        print(f"[*] Exporting to: {output_path}")
         
         try:
             xml_root = self.create_vulnerability_xml(issues, sitemap, target_url)
@@ -482,25 +467,25 @@ class XMLExporter:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(xml_string)
             
-            print(f"[+] Results exported successfully")
-            print(f"[+] Total vulnerabilities: {len(issues.get('issues', []))}")
+            print(f"[+] Export successful")
+            print(f"[+] Vulnerabilities: {len(issues.get('issues', []))}")
             return True
             
         except Exception as e:
-            print(f"[!] Failed to export XML: {e}")
+            print(f"[!] Export failed: {e}")
             return False
 
 
 def read_websites(file_path):
-    """Read website list from file"""
+    """Read target websites from file"""
     if not os.path.exists(file_path):
-        print(f"[!] Website list not found: {file_path}")
+        print(f"[!] File not found: {file_path}")
         return []
     
     with open(file_path, 'r') as f:
         websites = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     
-    print(f"[+] Loaded {len(websites)} websites from {file_path}")
+    print(f"[+] Loaded {len(websites)} websites")
     return websites
 
 
@@ -513,22 +498,21 @@ def sanitize_filename(url):
 
 
 def main():
-    """Main execution flow"""
+    """Main execution"""
     print("=" * 70)
-    print("Burp Suite Professional - Automated Scanner (Windows)")
+    print("Burp Suite Professional - Automated Scanner")
     print("=" * 70)
     
-    # Create directories
+    # Setup
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(INPUT_FILE), exist_ok=True)
     
-    # Load websites
     websites = read_websites(INPUT_FILE)
     if not websites:
-        print("[!] No websites to scan. Exiting.")
+        print("[!] No websites to scan")
         return
     
-    # Initialize components
+    # Initialize
     burp_manager = BurpManager(BURP_JAR_PATH, BURP_REST_API_JAR, BURP_API_KEY, CONFIG_FILE)
     api_client = BurpAPIClient(BURP_API_URL, API_HEADERS)
     xml_exporter = XMLExporter()
@@ -539,23 +523,23 @@ def main():
         print(f"Processing {idx}/{len(websites)}: {website}")
         print("=" * 70)
         
-        # Start Burp Suite
+        # Start Burp
         if not burp_manager.start():
-            print(f"[!] Failed to start Burp Suite for {website}. Skipping...")
+            print(f"[!] Failed to start Burp. Skipping {website}")
             continue
         
         # Wait for API
         if not burp_manager.wait_for_api():
-            print(f"[!] Burp API not available for {website}. Killing and skipping...")
+            print(f"[!] API not ready. Skipping {website}")
             burp_manager.kill()
             continue
         
         try:
-            # Run spider scan
+            # Spider
             if api_client.spider_scan(website):
                 api_client.wait_for_spider()
             
-            # Run active scan
+            # Active scan
             if api_client.active_scan(website):
                 api_client.wait_for_scan()
             
@@ -563,26 +547,26 @@ def main():
             issues = api_client.get_issues()
             sitemap = api_client.get_sitemap()
             
-            # Export to XML
+            # Export
             output_file = os.path.join(OUTPUT_DIR, sanitize_filename(website))
             xml_exporter.export(issues, sitemap, website, output_file)
             
         except Exception as e:
-            print(f"[!] Error during scan: {e}")
+            print(f"[!] Scan error: {e}")
             import traceback
             traceback.print_exc()
         
-        # Kill Burp Suite to clear RAM
+        # Kill Burp to free RAM
         burp_manager.kill()
         
-        # Wait before next iteration
+        # Wait before next
         if idx < len(websites):
-            print(f"\n[*] Waiting 5 seconds before next scan...")
+            print(f"\n[*] Waiting 5s before next scan...")
             time.sleep(5)
     
     print("\n" + "=" * 70)
     print("All scans completed!")
-    print(f"Results saved in: {OUTPUT_DIR}/")
+    print(f"Results in: {OUTPUT_DIR}/")
     print("=" * 70)
 
 
