@@ -1,10 +1,12 @@
 """
-Burp Suite Professional Automated Scanner - FINAL WORKING VERSION
+Burp Suite Professional Automated Scanner
 Uses burp-rest-api extension for proper API access
 Scans multiple websites with config and exports vulnerabilities as XML
 
 File: main.py
 Requirements: Java 21+, Burp Suite Pro, burp-rest-api JAR
+Author: Your Name
+License: MIT
 """
 
 import subprocess
@@ -20,11 +22,12 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 # ==================== CONFIGURATION ====================
-BURP_JAR_PATH = r"C:\Users\varun.bhat\Downloads\burpsuite_pro_v2025.11.5.jar"
-BURP_REST_API_JAR = r"C:\Users\varun.bhat\Downloads\burp-rest-api-2.3.2.jar"
+# Update these paths to match your system
+BURP_JAR_PATH = r"C:\path\to\burpsuite_pro.jar"
+BURP_REST_API_JAR = r"C:\path\to\burp-rest-api.jar"
 
 BURP_API_URL = "http://localhost:8090"
-BURP_API_KEY = "AK3cMFNtZqNhz2PeC0W5whjJGyThGysI"
+BURP_API_KEY = os.getenv("BURP_API_KEY", "your-api-key-here")  # Use environment variable or hardcode
 
 INPUT_FILE = "input/websites.txt"
 CONFIG_FILE = "config/burp_config.json"
@@ -83,13 +86,13 @@ class BurpManager:
         try:
             self.temp_project = f"temp_burp_project_{int(time.time())}.burp"
             
-            # CORRECT COMMAND - Uses -jar with --burp.jar parameter
+            # Build command to start Burp with REST API
             cmd = [
                 "java",
                 "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",
                 "--add-opens=java.base/java.io=ALL-UNNAMED",
-                "-Xmx4g",
+                "-Xmx4g",  # Allocate 4GB RAM (adjust as needed)
                 "-Djava.awt.headless=true",
                 "-jar",
                 self.rest_api_jar,
@@ -103,17 +106,16 @@ class BurpManager:
             if os.path.exists(self.config_file):
                 cmd.append(f"--config-file={self.config_file}")
             
-            print(f"[*] Command: {' '.join(cmd)}")
             print(f"[*] Burp JAR: {self.burp_jar}")
             print(f"[*] REST API JAR: {self.rest_api_jar}")
             print(f"[*] Project: {self.temp_project}")
             
-            # Start Burp
+            # Start Burp process
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
             
             print(f"[+] Burp Suite started (PID: {self.process.pid})")
@@ -137,7 +139,7 @@ class BurpManager:
             return False
     
     def kill(self):
-        """Kill our Burp process"""
+        """Kill our Burp process and cleanup"""
         print("[*] Killing Burp Suite process...")
         
         if self.process is None:
@@ -199,11 +201,6 @@ class BurpManager:
             try:
                 if not self.is_running():
                     print("[!] Burp process died unexpectedly!")
-                    # Print stderr for debugging
-                    if self.process and self.process.stderr:
-                        stderr = self.process.stderr.read().decode('utf-8', errors='ignore')
-                        if stderr:
-                            print(f"[!] Burp stderr: {stderr[:500]}")
                     return False
                 
                 response = requests.get(
