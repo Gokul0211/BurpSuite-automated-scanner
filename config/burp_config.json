@@ -1,0 +1,10 @@
+{
+  "project_options": {
+    "scanner": {
+      "pause_new_audit_items": false
+    }
+  },
+  "scanner": {
+    "pause_audit_items_while_out_of_scope": false
+  }
+}
