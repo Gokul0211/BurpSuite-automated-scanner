@@ -1,4 +1,5 @@
-*
-!config/
-!config/**
-!.gitignore
+*.jar
+.vs/
+__pycache__/
+/output/
+/logs/
