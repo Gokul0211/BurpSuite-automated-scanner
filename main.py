@@ -5,6 +5,7 @@ Using Burp's Official Built-in REST API + GUI Auto-Unpause + Smart Logic + Prett
 Integrations: Pause Timeout Handler, Aggressive Resume Clicker, No Retry on Execution Timeout
 HARDENED VERSION - Production-grade GPU safety
 PERFECTED VERSION - Proper fix.burp loading with copy operation + auto-unpause flag
+UPDATED: Includes automatic 'issues_reported' cleaning to prevent API rejection
 """
 import os
 import sys
@@ -453,6 +454,52 @@ class BurpScanner:
                     with open(SCAN_TEMPLATE, 'r') as f:
                         template_data = json.load(f)
                         
+                        # --- SURGICAL FIX: REMOVE 'POISON' BLOCK ---
+                        # We programmatically remove the 'issues_reported' block which contains 
+                        # version-specific hex codes that cause Burp to silently reject the config.
+                        
+                        poison_removed = False
+                        
+                        # Case 1: Raw Format (root -> scanner -> issues_reported)
+                        if "scanner" in template_data and isinstance(template_data["scanner"], dict):
+                            if "issues_reported" in template_data["scanner"]:
+                                logging.info("🧹 Removing version-specific 'issues_reported' block (Raw Format)")
+                                del template_data["scanner"]["issues_reported"]
+                                poison_removed = True
+                                
+                        # Case 2: Wrapped Format (root -> scan_configurations -> config -> scanner)
+                        if "scan_configurations" in template_data and isinstance(template_data["scan_configurations"], list):
+                            for cfg in template_data["scan_configurations"]:
+                                # Handle 'configuration' key (older versions)
+                                if "configuration" in cfg and "scanner" in cfg["configuration"]:
+                                    if "issues_reported" in cfg["configuration"]["scanner"]:
+                                        logging.info("🧹 Removing version-specific 'issues_reported' block (Wrapped Format)")
+                                        del cfg["configuration"]["scanner"]["issues_reported"]
+                                        poison_removed = True
+                                        
+                                # Handle 'config' key (newer versions - can be dict or string)
+                                elif "config" in cfg:
+                                    if isinstance(cfg["config"], dict) and "scanner" in cfg["config"]:
+                                        if "issues_reported" in cfg["config"]["scanner"]:
+                                            logging.info("🧹 Removing version-specific 'issues_reported' block (Wrapped Dict)")
+                                            del cfg["config"]["scanner"]["issues_reported"]
+                                            poison_removed = True
+                                    elif isinstance(cfg["config"], str):
+                                        # Parse string JSON, clean it, and dump it back
+                                        try:
+                                            inner_json = json.loads(cfg["config"])
+                                            if "scanner" in inner_json and "issues_reported" in inner_json["scanner"]:
+                                                logging.info("🧹 Removing version-specific 'issues_reported' block (Wrapped String)")
+                                                del inner_json["scanner"]["issues_reported"]
+                                                cfg["config"] = json.dumps(inner_json)
+                                                poison_removed = True
+                                        except:
+                                            pass
+                        
+                        if poison_removed:
+                            logging.info("✓ Configuration cleaned of version-specific conflicts")
+                        # -------------------------------------------
+                        
                         # Check if it's already in the correct format
                         if "scan_configurations" in template_data:
                             # Already wrapped correctly (NamedConfiguration or CustomConfiguration)
@@ -474,7 +521,7 @@ class BurpScanner:
                                 scan_config["scan_configurations"] = [
                                     {
                                         "type": "CustomConfiguration",
-                                        "configuration": extracted_config
+                                        "config": json.dumps(extracted_config)
                                     }
                                 ]
                                 logging.info(f"✓ Wrapped {list(extracted_config.keys())} in CustomConfiguration")
@@ -487,9 +534,10 @@ class BurpScanner:
                                 if key not in valid_config_keys and key not in ["urls", "scope"]:
                                     scan_config[key] = template_data[key]
                                     
-                    logging.info(f"✓ Loaded scan settings from {SCAN_TEMPLATE.name}")
+                        logging.info(f"✓ Loaded scan settings from {SCAN_TEMPLATE.name}")
                 except Exception as e:
                     logging.warning(f"⚠️  Could not load scan template: {e}")
+                    logging.warning(traceback.format_exc())
             
             # POST to /v0.1/scan
             resp = self.session.post(
@@ -867,7 +915,7 @@ def main():
         
         if not is_valid:
             logging.error("\n❌ Configuration validation failed")
-            logging.error("   Please fix the issues above and try again")
+            logging.error(f"   Please fix the issues above and try again")
             sys.exit(1)
         
         logging.info("\n✓ Configuration validated successfully")
