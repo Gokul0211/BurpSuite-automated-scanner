@@ -71,6 +71,9 @@ class BurpConfig:
     temp_projects_dir: Path = OUTPUT_DIR / "burp_projects_temp"
     scan_results_dir: Path = OUTPUT_DIR
     
+    # --- RESOURCE POOL SETTING ---
+    resource_pool_name: str = "automation" 
+
     # Integration Parameters
     pause_timeout: int = 120          # seconds to wait after clicking resume before aborting
     pause_check_interval: int = 15    # how often to check status
@@ -539,12 +542,28 @@ class BurpScanner:
                     logging.warning(f"⚠️  Could not load scan template: {e}")
                     logging.warning(traceback.format_exc())
             
+            # --- RESOURCE POOL LOGIC ---
+            if self.config.resource_pool_name:
+                scan_config["resource_pool"] = self.config.resource_pool_name
+                logging.info(f"   Target Pool: '{self.config.resource_pool_name}'")
+
             # POST to /v0.1/scan
             resp = self.session.post(
                 f"{self.config.api_base_url}/v0.1/scan",
                 json=scan_config,
                 timeout=30
             )
+            
+            # --- FALLBACK LOGIC ---
+            if resp.status_code == 400 and self.config.resource_pool_name:
+                logging.warning(f"⚠️  Pool '{self.config.resource_pool_name}' not found (400). Retrying with Default Pool...")
+                del scan_config["resource_pool"]
+                resp = self.session.post(
+                    f"{self.config.api_base_url}/v0.1/scan",
+                    json=scan_config,
+                    timeout=30
+                )
+            # ----------------------
             
             if resp.status_code != 201:
                 logging.error(f"❌ Scan creation failed: {resp.status_code} - {resp.text}")
